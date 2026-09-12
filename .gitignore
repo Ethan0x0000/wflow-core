@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# Testing
+coverage/
+test-results/
+.playwright/
+
+# Cache & OS
+.DS_Store
+Thumbs.db
+.cache/
+.turbo/
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Local env
+.env
+.env.*
+!.env.example

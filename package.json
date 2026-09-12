@@ -1,0 +1,149 @@
+{
+  "name": "wflow-core",
+  "version": "0.1.0",
+  "description": "Reusable declarative workflow engine powered by Temporal",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./client": {
+      "import": {
+        "types": "./dist/client.d.mts",
+        "default": "./dist/client.mjs"
+      },
+      "require": {
+        "types": "./dist/client.d.ts",
+        "default": "./dist/client.js"
+      }
+    },
+    "./worker": {
+      "import": {
+        "types": "./dist/worker.d.mts",
+        "default": "./dist/worker.mjs"
+      },
+      "require": {
+        "types": "./dist/worker.d.ts",
+        "default": "./dist/worker.js"
+      }
+    },
+    "./workflows": {
+      "import": {
+        "types": "./dist/workflows.d.mts",
+        "default": "./dist/workflows.mjs"
+      },
+      "require": {
+        "types": "./dist/workflows.d.ts",
+        "default": "./dist/workflows.js"
+      }
+    },
+    "./protocol": {
+      "import": {
+        "types": "./dist/protocol.d.mts",
+        "default": "./dist/protocol.mjs"
+      },
+      "require": {
+        "types": "./dist/protocol.d.ts",
+        "default": "./dist/protocol.js"
+      }
+    },
+    "./testing": {
+      "import": {
+        "types": "./dist/testing.d.mts",
+        "default": "./dist/testing.mjs"
+      },
+      "require": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      }
+    },
+    "./codec": {
+      "import": {
+        "types": "./dist/codec.d.mts",
+        "default": "./dist/codec.mjs"
+      },
+      "require": {
+        "types": "./dist/codec.d.ts",
+        "default": "./dist/codec.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsup",
+    "build:types": "tsup --dts-only",
+    "prepack": "pnpm build",
+    "type-check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run --exclude 'tests/temporal.test.ts'",
+    "test:integration": "pnpm build && vitest run --config vitest.integration.config.ts",
+    "test:pack": "pnpm build && node scripts/pack-smoke.mjs",
+    "example": "pnpm build && tsx examples/purchase.ts",
+    "demo": "pnpm build && tsx examples/run-demo.ts",
+    "demo:real": "pnpm build && tsx examples/run-real-demo.ts"
+  },
+  "dependencies": {
+    "@temporalio/client": "1.23.0",
+    "@temporalio/common": "1.23.0",
+    "@temporalio/worker": "1.23.0",
+    "@temporalio/workflow": "1.23.0",
+    "acorn": "^8.18.0",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@temporalio/testing": "^1.23.0"
+  },
+  "peerDependenciesMeta": {
+    "@temporalio/testing": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@temporalio/testing": "1.23.0",
+    "@types/node": "^22.0.0",
+    "tsup": "8.5.1",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ethan0x0000/wflow-core.git"
+  },
+  "homepage": "https://github.com/Ethan0x0000/wflow-core#readme",
+  "bugs": {
+    "url": "https://github.com/Ethan0x0000/wflow-core/issues"
+  },
+  "keywords": [
+    "temporal",
+    "workflow",
+    "workflow-engine",
+    "durable-execution",
+    "orchestration",
+    "bpm",
+    "approval",
+    "typescript"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
