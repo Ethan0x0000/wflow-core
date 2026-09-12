@@ -91,6 +91,7 @@
   "scripts": {
     "build": "tsup",
     "build:types": "tsup --dts-only",
+    "prepare": "pnpm build",
     "prepack": "pnpm build",
     "type-check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run --exclude 'tests/temporal.test.ts'",
