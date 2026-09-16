@@ -11,6 +11,13 @@ function str(value: unknown): string {
   if (typeof value !== "string" || !value) throw new WorkflowValidationError("INVALID_WFLOW_STRING");
   return value;
 }
+/** Host entity ids (users, depts, roles) are Long in the original wflow data, so the editor hands
+ *  them over as JSON numbers; the SDK keeps ids as strings, so coerce instead of rejecting. */
+function idStr(value: unknown): string {
+  if (typeof value === "string" && value) return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  throw new WorkflowValidationError("INVALID_WFLOW_STRING");
+}
 function unsupported(feature: string): never { throw new WorkflowValidationError(`UNSUPPORTED_WFLOW_${feature}`); }
 const units: Record<string, number> = { S: 1000, M: 60_000, H: 3_600_000, D: 86_400_000 };
 function duration(time: unknown, unit: unknown): number {
@@ -49,7 +56,7 @@ export function importWflowProcessEvents(raw: unknown): Record<string, Listener[
 export function importWflowAssignment(props: Record<string, unknown>): Assignment {
   const rule = props.ruleType ?? "ASSIGN_USER";
   if (rule === "ASSIGN_USER") {
-    const ids = arr(props.assignUser).map((user) => str(typeof user === "string" ? user : obj(user).id));
+    const ids = arr(props.assignUser).map((user) => idStr(typeof user === "string" ? user : obj(user).id));
     if (ids.length) return { type: "users", userIds: [...new Set(ids)] };
   }
   if (rule === "SELF" || rule === "INITIATOR" || rule === 'ROOT_SELF') return { type: "initiator" };
@@ -216,7 +223,7 @@ export function importWflowDefinition(raw: unknown): Definition {
           ...(props.isSyncBizKey === true ? { inheritBusinessKey: true } : {}),
           ...(props.formAutoMapping === true ? { formAutoMapping: true } : {}),
           ...(props.statusSync === true ? { statusSync: true } : {}),
-          ...(fixed?.id ? { initiator: { type: "fixed" as const, userId: str(fixed.id) } } : {}),
+          ...(fixed?.id ? { initiator: { type: "fixed" as const, userId: idStr(fixed.id) } } : {}),
           ...(Object.keys(childEvents).length ? { events: childEvents } : {}) }];
       }
       if (node.type === "Router") {

@@ -6,6 +6,19 @@ import type { HumanNode, Task } from '../src/schema';
 
 const approval = (id: string, mode = 'AND') => ({ id, type: 'Approval', props: { ruleType: 'ASSIGN_USER', assignUser: ['manager'], taskMode: { type: mode, percentage: 67 } } });
 describe('wflow editor compatibility', () => {
+  it('coerces numeric org ids picked in the editor into string assignee ids', () => {
+    const nodes = importWflowDefinition({ id: 'numeric', name: 'Numeric', nodes: [
+      { id: 'review', type: 'Approval', props: { ruleType: 'ASSIGN_USER', assignUser: [{ id: 381496, name: '旅人', type: 'user' }] } },
+      { id: 'cc', type: 'Cc', props: { ruleType: 'ASSIGN_USER', assignUser: [{ id: 1486186 }, 'u-manager'] } },
+      { id: 'sub', type: 'Subproc', props: { code: 'child-flow', initiatorType: 'FIXED', fixedUser: { id: 381496 } } },
+    ] }).nodes;
+    expect(nodes[0]).toMatchObject({ assignees: { type: 'users', userIds: ['381496'] } });
+    expect(nodes[1]).toMatchObject({ recipients: { type: 'users', userIds: ['1486186', 'u-manager'] } });
+    expect(nodes[2]).toMatchObject({ initiator: { type: 'fixed', userId: '381496' } });
+  });
+  it('still rejects assignees without a usable id', () => {
+    expect(() => importWflowDefinition({ id: 'bad', name: 'Bad', nodes: [{ id: 'review', type: 'Approval', props: { ruleType: 'ASSIGN_USER', assignUser: [{}] } }] })).toThrow('INVALID_WFLOW_STRING');
+  });
   it.each([['AUTO_PASS', 'approve'], ['AUTO_REFUSE', 'reject']])('imports automatic terminal node %s', (mode, outcome) => {
     expect(importWflowDefinition({ id: 'automatic', name: 'Automatic', nodes: [{ id: 'decision', type: 'Approval', props: { mode } }] }).nodes).toEqual([{ id: 'decision', type: 'terminate', outcome }]);
   });
