@@ -8,6 +8,7 @@ import { AdapterError } from "../src/errors.js";
 import { WorkflowEngineClient } from "../src/client.js";
 import { createMemoryAdapters, createTestEngine } from "../src/testing.js";
 import { parseDefinition } from "../src/definition.js";
+import { importWflowDefinition } from "../src/wflow.js";
 import { resolveWorkflowsPath } from "../src/worker.js";
 import { workflowId } from "../src/protocol.js";
 import type { Data, Definition, Node, Snapshot, WorkflowEvent, WorkflowInput } from "../src/schema.js";
@@ -17,8 +18,7 @@ describe("Temporal workflow runtime", () => {
   let environment: TestWorkflowEnvironment | undefined;
   afterEach(async () => { await environment?.teardown(); environment = undefined; });
 
-  async function runScenario(nodes: Node[], scenario: (engine: WorkflowEngineClient, handle: Awaited<ReturnType<WorkflowEngineClient['start']>>, history: WorkflowEvent[]) => Promise<void>, actions: ReadonlyMap<string, ActionHandler> = new Map(), child?: Definition, settings?: Definition['settings'], integrate?: IntegrationHandler, sync?: SyncHandler, data: Data = {}, initiator?: WorkflowInput["initiator"], nodeHandlers?: ReadonlyMap<string, NodeHandler>) {
-    const definition = parseDefinition({ schemaVersion: 1, id: 'scenario', version: 1, name: 'Scenario', nodes, ...(settings ? { settings } : {}) });
+  async function runDefinition(definition: Definition, scenario: (engine: WorkflowEngineClient, handle: Awaited<ReturnType<WorkflowEngineClient['start']>>, history: WorkflowEvent[]) => Promise<void>, actions: ReadonlyMap<string, ActionHandler> = new Map(), child?: Definition, integrate?: IntegrationHandler, sync?: SyncHandler, data: Data = {}, initiator?: WorkflowInput["initiator"], nodeHandlers?: ReadonlyMap<string, NodeHandler>) {
     const memory = createMemoryAdapters({ definitions: { async get() { return child ?? definition; } }, actions, ...(integrate ? { integrate } : {}), ...(sync ? { syncBusinessData: sync } : {}), ...(nodeHandlers ? { nodeHandlers } : {}) });
     const test = await createTestEngine({ adapters: memory.adapters, taskQueue: 'scenarios' });
     environment = test.environment;
@@ -26,6 +26,10 @@ describe("Temporal workflow runtime", () => {
       const handle = await test.engine.start({ tenantId: 'tenant', instanceId: 'scenario-1', businessKey: 'scenario-1', initiatorId: 'employee', definition, data, ...(initiator ? { initiator } : {}) });
       await scenario(test.engine, handle, memory.events);
     });
+  }
+  async function runScenario(nodes: Node[], scenario: (engine: WorkflowEngineClient, handle: Awaited<ReturnType<WorkflowEngineClient['start']>>, history: WorkflowEvent[]) => Promise<void>, actions: ReadonlyMap<string, ActionHandler> = new Map(), child?: Definition, settings?: Definition['settings'], integrate?: IntegrationHandler, sync?: SyncHandler, data: Data = {}, initiator?: WorkflowInput["initiator"], nodeHandlers?: ReadonlyMap<string, NodeHandler>) {
+    const definition = parseDefinition({ schemaVersion: 1, id: 'scenario', version: 1, name: 'Scenario', nodes, ...(settings ? { settings } : {}) });
+    await runDefinition(definition, scenario, actions, child, integrate, sync, data, initiator, nodeHandlers);
   }
   const human = (id: string): Node => ({ id, type: 'approval', assignees: { type: 'users', userIds: [id] }, mode: 'all', selfApproval: 'allow', rejectRule: { type: 'END' } });
   async function waitFor<T>(value: () => T | undefined): Promise<T> {
@@ -262,6 +266,33 @@ describe("Temporal workflow runtime", () => {
       await engine.command({ type: 'approve', requestId: 'end-again', tenantId: 'tenant', instanceId: 'scenario-1', taskId: final.id, actorId: 'two' });
       expect((await handle.result()).status).toBe('completed');
     }, new Map(), undefined, { returnSkip: true });
+  }, 30_000);
+
+  it.each(['returnTo', 'withdraw'] as const)('%s can target the initiator through the virtual resubmit node', async (type) => {
+    // importWflowDefinition derives the resubmit node from the Start node: it is seeded into
+    // completedHumans at start-up but never appears in definition.nodes, so it needs its own target rule.
+    const definition = importWflowDefinition({ id: 'scenario', name: 'Scenario', nodes: [
+      { id: 'start', type: 'Start' },
+      { id: 'review', type: 'Approval', props: { ruleType: 'ASSIGN_USER', assignUser: ['manager'],
+        taskMode: { type: 'OR' }, operationPerms: [{ action: 'fallback', enable: true }] } },
+    ] });
+    expect(definition.resubmit?.id).toBe('start');
+    expect(definition.nodes.some((node) => node.id === 'start')).toBe(false);
+    await runDefinition(definition, async (engine, handle, events) => {
+      const review = (await taskIds(engine, 1))[0]!;
+      if (type === 'returnTo') await engine.command({ type: 'returnTo', requestId: 'fallback', tenantId: 'tenant', instanceId: 'scenario-1', taskId: review.id, actorId: 'manager', nodeId: 'start' });
+      else await engine.command({ type: 'withdraw', requestId: 'withdraw', tenantId: 'tenant', instanceId: 'scenario-1', actorId: 'employee', nodeId: 'start' });
+      // The initiator receives a fresh resubmit task, then the approval node runs again with a new task.
+      let resubmit: Snapshot['tasks'][number] | undefined;
+      await expect.poll(async () => { resubmit = (await engine.snapshot({ tenantId: 'tenant', actorId: 'employee', instanceId: 'scenario-1' })).tasks[0]; return resubmit?.nodeId; }).toBe('start');
+      await engine.command({ type: 'complete', requestId: 'resubmit', tenantId: 'tenant', instanceId: 'scenario-1', taskId: resubmit!.id, actorId: 'employee' });
+      let again: Snapshot['tasks'][number] | undefined;
+      await expect.poll(async () => { again = (await engine.snapshot({ tenantId: 'tenant', actorId: 'employee', instanceId: 'scenario-1' })).tasks[0]; return again?.nodeId; }).toBe('review');
+      expect(again!.id).not.toBe(review.id);
+      await engine.command({ type: 'approve', requestId: 'approve', tenantId: 'tenant', instanceId: 'scenario-1', taskId: again!.id, actorId: 'manager' });
+      expect((await handle.result()).status).toBe('completed');
+      expect(events.some((event) => event.eventType === 'workflow.returnRequested')).toBe(true);
+    });
   }, 30_000);
 
   it.each(['approve', 'reject'] as const)('uses durable approval timeout: %s', async (outcome) => {

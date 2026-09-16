@@ -241,8 +241,12 @@ export async function genericWorkflowV1(raw: WorkflowInput): Promise<WorkflowRes
         let eventId: string;
         if (command.type === 'returnTo' || command.type === 'withdraw') {
           const target = ctx.completedHumans.get(command.nodeId);
-          const targetIndex = input.definition.nodes.findIndex((n) => n.id === command.nodeId);
-          if (!target || targetIndex < 0) throw new WorkflowValidationError('INVALID_RETURN_TARGET');
+          // The resubmit (initiator) node is virtual: it is seeded into completedHumans when the run starts
+          // and re-run from offset 0 (see the resubmit branch below), so it never appears in definition.nodes.
+          // Its position is therefore "before the first node" rather than missing.
+          const resubmitTarget = input.definition.resubmit?.id === command.nodeId;
+          const targetIndex = resubmitTarget ? -1 : input.definition.nodes.findIndex((n) => n.id === command.nodeId);
+          if (!target || (targetIndex < 0 && !resubmitTarget)) throw new WorkflowValidationError('INVALID_RETURN_TARGET');
           if (command.type === 'returnTo') {
             const active = ctx.activeTasks.get(command.taskId);
             const currentIndex = input.definition.nodes.findIndex((n) => n.id === active?.node.id);
